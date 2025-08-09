@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Waki记账（ES5兼容版）</title>
+<style>
+  :root{
+    --primary:#3a7afe; --text:#1f2937; --muted:#6b7280; --bg:#f8fafc; --card:#ffffff; --danger:#ef4444;
+    --progress:#3a7afe;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI",Roboto,Arial,"Helvetica Neue",Helvetica,sans-serif;
+    background:var(--bg) no-repeat center/cover fixed; color:var(--text);
+  }
+  body::before{ content:""; position:fixed; inset:0; background:rgba(255,255,255,.65); pointer-events:none; z-index:-1; }
+  header{ position:sticky; top:0; z-index:5; background:var(--card); padding:12px 16px; box-shadow:0 1px 0 rgba(0,0,0,.06); }
+  h1{ font-size:18px; margin:0; }
+  .container{ padding:12px 16px 120px; }
+  .card{ background:var(--card); border-radius:12px; padding:12px; box-shadow:0 1px 2px rgba(0,0,0,.04); margin-bottom:12px; }
+  .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .btn{ flex:1; padding:14px 12px; border-radius:12px; border:none; background:#eef2ff; color:#1d4ed8; font-weight:600; font-size:16px; cursor:pointer; }
+  .btn:active{ transform:scale(0.98); }
+  .btn.secondary{ background:#ecfeff; color:#0e7490; }
+  .btn.warn{ background:#fee2e2; color:#b91c1c; }
+  .btn.ghost{ background:#f3f4f6; color:#111827; }
+  .stat{ font-size:28px; font-weight:800; }
+  .muted{ color:var(--muted); font-size:12px; }
+  .list{ margin:0; padding:0; list-style:none; }
+  .item{ display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px dashed #e5e7eb; }
+  .item:last-child{ border-bottom:none; }
+  .tabs{ position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid #e5e7eb; display:flex; z-index:10;}
+  .tab{ flex:1; padding:12px 8px; text-align:center; font-weight:700; cursor:pointer; }
+  .tab.active{ color:var(--primary); }
+  .seg{ display:flex; background:#e5e7eb; border-radius:10px; padding:3px; gap:3px; }
+  .seg button{ flex:1; border:none; background:transparent; padding:8px; border-radius:8px; font-weight:600; cursor:pointer; }
+  .seg button.active{ background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.06); color:#111827; }
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .right{ text-align:right; }
+  .hide{ display:none !important; }
+  .link{ color:#2563eb; text-decoration:underline; font-size:12px; background:none; border:none; cursor:pointer; }
+  .chip{ background:#f3f4f6; padding:4px 8px; border-radius:999px; font-size:12px; }
+
+  input[type="date"],input[type="text"],input[type="url"],input[type="color"],input[type="number"],select{
+    width:100%; font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; outline:none;
+  }
+
+  /* 备忘录 */
+  .todo{ display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px dashed #e5e7eb; }
+  .todo:last-child{ border-bottom:none; }
+  .circle{ width:20px; height:20px; border-radius:999px; border:2px solid #9ca3af; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
+  .circle::after{ content:""; width:10px; height:10px; border-radius:999px; background:transparent; }
+  .todo.done .circle{ border-color:var(--primary); }
+  .todo.done .circle::after{ background:var(--primary); }
+  .todo.done .text{ text-decoration:line-through; color:#9ca3af; }
+
+  /* 弹窗 */
+  .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:20; }
+  .modal{ width:min(92vw,420px); background:#fff; border-radius:14px; padding:16px; }
+  .modal h3{ margin:0 0 6px 0; }
+  .field{ display:flex; gap:8px; align-items:center; background:#f3f4f6; border-radius:10px; padding:10px 12px; }
+
+  /* 提醒泡泡 */
+  .bubble{ display:none; background:#fee2e2; color:#991b1b; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+  .bubble.show{ display:inline-block; }
+
+  /* 水印 */
+  .watermark-box{ position:fixed; left:0; right:0; bottom:58px; pointer-events:none; user-select:none; z-index:0; display:flex; justify-content:center; }
+  .watermark-img{ opacity:0.12; max-width:60vw; }
+  .watermark-text{ text-align:center; font-weight:900; letter-spacing:6px; font-size:42px; opacity:.08; color:#000; }
+
+  /* 色块 */
+  .swatch{ width:22px; height:22px; border-radius:6px; border:1px solid #e5e7eb; }
+
+  /* 预算进度条 */
+  .progress-wrap{ margin-top:8px; }
+  .progress-top{ display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--muted); }
+  progress{ width:100%; height:10px; border:none; border-radius:999px; overflow:hidden; background:#e5e7eb; }
+  progress::-webkit-progress-bar{ background:#e5e7eb; border-radius:999px; }
+  progress::-webkit-progress-value{ background:var(--progress); border-radius:999px; transition:width .25s ease; }
+  progress::-moz-progress-bar{ background:var(--progress); }
+
+  /* 图表交互 */
+  .chart-wrap{ position:relative; }
+  .chart-tip{ position:absolute; padding:6px 8px; border-radius:8px; background:#111827; color:#fff; font-size:12px; pointer-events:none; transform:translate(-50%, -110%); white-space:nowrap; }
+  .chart-guide{ position:absolute; top:0; bottom:0; width:1px; background:#9ca3af; opacity:.7; pointer-events:none; }
+</style>
+</head>
+<body>
+  <header><h1 id="title">记账</h1></header>
+
+  <!-- 记账页 -->
+  <main id="page-ledger" class="container">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <div>
+          <div class="muted">今日支出</div>
+          <div class="stat" id="today-total">¥0.00</div>
+          <div class="muted" id="today-date"></div>
+          <div class="progress-wrap" id="daily-progress-wrap">
+            <div class="progress-top">
+              <span class="muted">预算进度</span>
+              <span class="muted" id="daily-progress-text">0%</span>
+            </div>
+            <progress id="budget-progress" value="0" max="100" aria-label="今日预算进度"></progress>
+            <div class="progress-top" style="margin-top:4px;">
+              <span id="daily-left" class="muted">剩余 ¥0.00</span>
+              <span id="daily-limit" class="muted">日预算未设置</span>
+            </div>
+          </div>
+        </div>
+        <span id="bubble-daily" class="bubble">今日超支</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:end;">
+        <div style="flex:1;">
+          <div class="muted">记账日期</div>
+          <input id="entry-date" type="date">
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn" type="button" onclick="openAdd('早餐')" ontouchend="openAdd('早餐');event.preventDefault();">早餐</button>
+        <button class="btn secondary" type="button" onclick="openAdd('午餐')" ontouchend="openAdd('午餐');event.preventDefault();">午餐</button>
+        <button class="btn warn" type="button" onclick="openAdd('晚餐')" ontouchend="openAdd('晚餐');event.preventDefault();">晚餐</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <div class="muted">当日明细</div>
+        <button class="link" type="button" onclick="clearSelectedDay()" ontouchend="clearSelectedDay();event.preventDefault();">清除当日</button>
+      </div>
+      <ul id="selected-list" class="list"></ul>
+    </div>
+
+    <!-- 体重 + 备忘录 -->
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:end;">
+        <div class="muted">体重记录</div>
+        <div class="row" style="gap:8px;">
+          <input id="weight-date" type="date" style="width:140px;">
+          <input id="weight-input" type="number" step="0.1" placeholder="体重(kg) 例如 65.2" style="width:140px;">
+          <button class="btn ghost" type="button" onclick="saveWeight()" ontouchend="saveWeight();event.preventDefault();">保存体重</button>
+        </div>
+      </div>
+      <div id="weight-tip" class="muted" style="margin-top:6px;">建议每日一条；再次保存会覆盖当天体重。</div>
+
+      <hr style="border:none;border-top:1px dashed #e5e7eb; margin:10px 0;">
+
+      <div class="row" style="justify-content:space-between;align-items:end;">
+        <div class="muted">备忘录</div>
+        <div class="row" style="gap:8px;">
+          <input id="memo-date" type="date" style="width:140px;">
+          <input id="memo-input" type="text" placeholder="例如：18:30 超市买牛奶" style="width:220px;">
+          <button class="btn ghost" type="button" onclick="addMemo()" ontouchend="addMemo();event.preventDefault();">添加</button>
+        </div>
+      </div>
+      <div id="memo-list"></div>
+    </div>
+  </main>
+
+  <!-- 我的页 -->
+  <main id="page-mine" class="container hide">
+    <div class="card">
+      <div class="seg" role="tablist" aria-label="报表切换">
+        <button id="seg-week" class="active" type="button" onclick="setReportRange('week')" ontouchend="setReportRange('week');event.preventDefault();">周报</button>
+        <button id="seg-month" type="button" onclick="setReportRange('month')" ontouchend="setReportRange('month');event.preventDefault();">月报</button>
+        <button id="seg-year" type="button" onclick="setReportRange('year')" ontouchend="setReportRange('year');event.preventDefault();">年报</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="seg" role="tablist" aria-label="图表模式">
+        <button id="seg-expense" class="active" type="button" onclick="setChartMode('expense')" ontouchend="setChartMode('expense');event.preventDefault();">支出</button>
+        <button id="seg-weight" type="button" onclick="setChartMode('weight')" ontouchend="setChartMode('weight');event.preventDefault();">体重</button>
+      </div>
+    </div>
+
+    <div class="card grid">
+      <div>
+        <div class="muted" id="range-title">区间总支出</div>
+        <div class="stat" id="range-total">¥0.00</div>
+      </div>
+      <div class="right" id="bytype-box">
+        <div><span class="chip">早餐</span> <b id="sum-b">¥0</b></div>
+        <div><span class="chip">午餐</span> <b id="sum-l">¥0</b></div>
+        <div><span class="chip">晚餐</span> <b id="sum-d">¥0</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <div class="muted" id="chart-caption"></div>
+        <span id="bubble-range" class="bubble">区间超支</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart" width="800" height="400" aria-label="曲线图" role="img"></canvas>
+        <div id="chart-tip" class="chart-tip hide" role="status" aria-live="polite"></div>
+        <div id="chart-guide" class="chart-guide hide" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <div class="muted" id="detail-title">区间明细</div>
+        <div class="row" style="gap:6px; align-items:center;">
+          <button id="toggle-detail" class="link" type="button" onclick="toggleRangeDetail()" ontouchend="toggleRangeDetail();event.preventDefault();">展开明细</button>
+          <button class="link" type="button" onclick="exportData()" ontouchend="exportData();event.preventDefault();">导出数据</button>
+          <label class="link" style="cursor:pointer;">
+            导入数据<input type="file" accept="application/json" onchange="importData(event)" style="display:none;">
+          </label>
+          <button class="link" type="button" onclick="clearAll()" ontouchend="clearAll();event.preventDefault();">重置全部</button>
+        </div>
+      </div>
+      <ul id="range-list" class="list hide"></ul>
+    </div>
+
+    <!-- 主题 -->
+    <div class="card">
+      <div class="muted" style="margin-bottom:6px;">主题、背景 与 Waki Logo</div>
+      <div class="row">
+        <div style="flex:1;">
+          <div class="muted">主色</div>
+          <div class="row">
+            <input id="c-primary" type="color" value="#3a7afe" style="flex:0 0 56px;">
+            <div class="swatch" id="s-primary" style="background:var(--primary);"></div>
+          </div>
+        </div>
+        <div style="flex:1;">
+          <div class="muted">文字</div>
+          <div class="row">
+            <input id="c-text" type="color" value="#1f2937" style="flex:0 0 56px;">
+            <div class="swatch" id="s-text" style="background:var(--text);"></div>
+          </div>
+        </div>
+        <div style="flex:1;">
+          <div class="muted">卡片</div>
+          <div class="row">
+            <input id="c-card" type="color" value="#ffffff" style="flex:0 0 56px;">
+            <div class="swatch" id="s-card" style="background:var(--card);"></div>
+          </div>
+          <div class="muted" style="margin-top:6px;">卡片透明度(0.1~1.0)</div>
+          <input id="card-opacity" type="number" min="0.1" max="1" step="0.02" value="1">
+        </div>
+        <div style="flex:1;">
+          <div class="muted">背景色</div>
+          <div class="row">
+            <input id="c-bg" type="color" value="#f8fafc" style="flex:0 0 56px;">
+            <div class="swatch" id="s-bg" style="background:var(--bg);"></div>
+          </div>
+        </div>
+        <div style="flex:1;">
+          <div class="muted">进度条</div>
+          <div class="row">
+            <input id="c-progress" type="color" value="#3a7afe" style="flex:0 0 56px;">
+            <div class="swatch" id="s-progress" style="background:var(--progress);"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px;">
+        <input id="bg-url" type="url" placeholder="背景图 URL（可留空）">
+        <label class="btn ghost" style="flex:0 0 auto; cursor:pointer;">
+          本地图片<input id="bg-file" type="file" accept="image/*" style="display:none;">
+        </label>
+      </div>
+
+      <hr style="border:none;border-top:1px dashed #e5e7eb; margin:10px 0;">
+      <div class="muted">Waki Logo（水印）</div>
+      <div class="row">
+        <input id="logo-url" type="url" placeholder="Logo 图片 URL（可留空）">
+        <label class="btn ghost" style="flex:0 0 auto; cursor:pointer;">
+          本地图片<input id="logo-file" type="file" accept="image/*" style="display:none;">
+        </label>
+      </div>
+      <div class="row">
+        <div style="flex:1;">
+          <div class="muted">大小(px)</div>
+          <input id="logo-size" type="number" min="24" max="400" step="4" value="160">
+        </div>
+        <div style="flex:1;">
+          <div class="muted">透明度(0.02~0.6)</div>
+          <input id="logo-opacity" type="number" min="0.02" max="0.6" step="0.02" value="0.12">
+        </div>
+        <div style="flex:1;">
+          <div class="muted">位置</div>
+          <select id="logo-pos">
+            <option value="bottom-center">底部-居中</option>
+            <option value="bottom-left">底部-左</option>
+            <option value="bottom-right">底部-右</option>
+            <option value="center">屏幕中间</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <button class="btn" type="button" onclick="saveTheme()" ontouchend="saveTheme();event.preventDefault();">保存主题</button>
+        <button class="btn secondary" type="button" onclick="resetTheme()" ontouchend="resetTheme();event.preventDefault();">恢复默认</button>
+        <button class="btn warn" type="button" onclick="clearBackground()" ontouchend="clearBackground();event.preventDefault();">清除背景图</button>
+      </div>
+    </div>
+
+    <!-- 预算设置 -->
+    <div class="card">
+      <div class="muted">预算设置（超出将显示提醒气泡）</div>
+      <div class="grid">
+        <div><div class="muted">日预算（¥）</div><input id="bd" type="number" step="0.01" placeholder="例如 50"></div>
+        <div><div class="muted">周预算（¥）</div><input id="bw" type="number" step="0.01" placeholder="例如 300"></div>
+        <div><div class="muted">月预算（¥）</div><input id="bm" type="number" step="0.01" placeholder="例如 1200"></div>
+        <div><div class="muted">年预算（¥）</div><input id="by" type="number" step="0.01" placeholder="例如 14400"></div>
+      </div>
+      <div class="row">
+        <button class="btn" type="button" onclick="saveBudget()" ontouchend="saveBudget();event.preventDefault();">保存预算</button>
+        <button class="btn secondary" type="button" onclick="resetBudget()" ontouchend="resetBudget();event.preventDefault();">清空预算</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- 底部导航 -->
+  <nav class="tabs" role="tablist" aria-label="底部导航">
+    <div id="tab-ledger" class="tab active" role="tab" tabindex="0" onclick="switchTab('ledger')" ontouchend="switchTab('ledger');event.preventDefault();">记账</div>
+    <div id="tab-mine" class="tab" role="tab" tabindex="0" onclick="switchTab('mine')" ontouchend="switchTab('mine');event.preventDefault();">我的</div>
+  </nav>
+
+  <!-- 水印容器 -->
+  <div id="watermark" class="watermark-box">
+    <div id="wm-text" class="watermark-text">Waki</div>
+    <img id="wm-img" class="watermark-img hide" alt="Waki Logo">
+  </div>
+
+  <!-- 金额输入弹窗 -->
+  <div id="modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="添加消费">
+    <div class="modal">
+      <h3 id="modal-title">添加消费</h3>
+      <div class="field">
+        <span class="muted">金额(¥)</span>
+        <input id="amount" type="number" inputmode="decimal" step="0.01" placeholder="例如 12.50">
+      </div>
+      <div class="row">
+        <button class="btn" type="button" onclick="quick(5)" ontouchend="quick(5);event.preventDefault();">+5</button>
+        <button class="btn" type="button" onclick="quick(10)" ontouchend="quick(10);event.preventDefault();">+10</button>
+        <button class="btn" type="button" onclick="quick(20)" ontouchend="quick(20);event.preventDefault();">+20</button>
+      </div>
+      <div class="row">
+        <button class="btn" type="button" onclick="saveAmount()" ontouchend="saveAmount();event.preventDefault();">保存</button>
+        <button class="btn secondary" type="button" onclick="closeModal()" ontouchend="closeModal();event.preventDefault();">取消</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ===== 工具 & 常量（ES5） ===== */
+var KEY='ledgerEntries_v3';
+var MEMO_KEY='ledgerMemos_v2';
+var THEME_KEY='ledgerTheme_v4'; // 版本+1，避免旧缓存影响（新增cardOpacity）
+var BUDGET_KEY='ledgerBudget_v1';
+var WEIGHT_KEY='ledgerWeight_v1';
+
+function $(id){ return document.getElementById(id); }
+function loadJSON(k,fallback){ try{ var s=localStorage.getItem(k); return s?JSON.parse(s):fallback; }catch(e){ return fallback; } }
+function saveJSON(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function fmt(n){ return '¥'+(Number(n||0)).toFixed(2); }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function sum(list){ var t=0,i; for(i=0;i<list.length;i++){ t+=Number(list[i].amount||0); } return t; }
+function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+
+/* ===== 账目 ===== */
+function loadEntries(){ return loadJSON(KEY,[]); }
+function saveEntries(list){ saveJSON(KEY,list); }
+function addEntryWithDate(type, amount, dateStr){
+  var now=new Date();
+  var ts=new Date(dateStr+'T'+now.toTimeString().slice(0,8)).getTime()+Math.floor(Math.random()*999);
+  var e={ ts:ts, date:dateStr, type:type, amount:Number(amount) };
+  var list=loadEntries(); list.push(e); saveEntries(list); return e;
+}
+function removeEntry(ts){
+  var arr=loadEntries(), out=[], i;
+  for(i=0;i<arr.length;i++){ if(arr[i].ts!==ts) out.push(arr[i]); }
+  saveEntries(out);
+}
+
+/* ===== 区间工具 ===== */
+function filterByDateRange(list,s,e){
+  var out=[],i; for(i=0;i<list.length;i++){ var x=list[i]; if(x.date>=s && x.date<=e) out.push(x); } return out;
+}
+function getWeekRange(d){
+  if(!d) d=new Date();
+  var day=(d.getDay()||7), mon=new Date(d); mon.setDate(d.getDate()-(day-1));
+  var sun=new Date(mon); sun.setDate(mon.getDate()+6);
+  return {start:mon.toISOString().slice(0,10), end:sun.toISOString().slice(0,10)};
+}
+function getMonthRange(d){
+  if(!d) d=new Date();
+  var first=new Date(d.getFullYear(),d.getMonth(),1), last=new Date(d.getFullYear(),d.getMonth()+1,0);
+  return {start:first.toISOString().slice(0,10), end:last.toISOString().slice(0,10)};
+}
+function getYearRange(d){
+  if(!d) d=new Date();
+  var first=new Date(d.getFullYear(),0,1), last=new Date(d.getFullYear(),11,31);
+  return {start:first.toISOString().slice(0,10), end:last.toISOString().slice(0,10)};
+}
+function groupByDate(range, list){
+  var labels=[], sums=[], byType={ '早餐':0,'午餐':0,'晚餐':0 }, map={}, d;
+  for(d=new Date(range.start); d<=new Date(range.end); d.setDate(d.getDate()+1)){
+    var k=d.toISOString().slice(0,10); labels.push(k); map[k]=0;
+  }
+  var i;
+  for(i=0;i<list.length;i++){
+    var e=list[i]; map[e.date]=(map[e.date]||0)+Number(e.amount);
+    if(byType.hasOwnProperty(e.type)) byType[e.type]+=Number(e.amount);
+  }
+  for(i=0;i<labels.length;i++){ sums.push(map[labels[i]]||0); }
+  return { labels:labels, sums:sums, byType:byType };
+}
+function groupByMonth(range, list){
+  var lab=['01','02','03','04','05','06','07','08','09','10','11','12'], sums=new Array(12), i;
+  for(i=0;i<12;i++) sums[i]=0;
+  var byType={'早餐':0,'午餐':0,'晚餐':0};
+  for(i=0;i<list.length;i++){
+    var e=list[i], m=parseInt(e.date.slice(5,7),10)-1; sums[m]+=Number(e.amount);
+    if(byType.hasOwnProperty(e.type)) byType[e.type]+=Number(e.amount);
+  }
+  return { labels:lab, sums:sums, byType:byType };
+}
+
+/* ===== 备忘录 ===== */
+function loadMemos(dateStr){ var all=loadJSON(MEMO_KEY,{}); return all[dateStr]||[]; }
+function saveMemos(dateStr, list){ var all=loadJSON(MEMO_KEY,{}); all[dateStr]=list; saveJSON(MEMO_KEY,all); }
+
+/* ===== 体重 ===== */
+function loadWeights(){ return loadJSON(WEIGHT_KEY,{}); }
+function saveWeight(){
+  var d=$('weight-date').value || todayStr();
+  var v=Number(($('weight-input').value||'').trim());
+  if(!(v>0)){ alert('请输入大于0的体重'); return; }
+  var all=loadWeights(); all[d]=v; saveJSON(WEIGHT_KEY,all);
+  alert('已保存体重：'+v+' kg'); $('weight-input').value='';
+  if(!isMineHidden() && chartMode==='weight') renderReport(currentRange);
+}
+
+/* ===== 主题/背景/Logo ===== */
+var currentTheme=loadJSON(THEME_KEY,{});
+function toColorHex(s){
+  var m = /^#?[0-9a-fA-F]{6}$/.test(s) ? s.replace('#','') : null;
+  if(m) return '#'+m.toLowerCase();
+  var r = s && s.match && s.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if(r){ function n(x){ var v=parseInt(x,10).toString(16); return (v.length<2?'0':'')+v; } return '#'+n(r[1])+n(r[2])+n(r[3]); }
+  return '#000000';
+}
+function hexToRgbaStr(hex, alpha){
+  hex = toColorHex(hex);
+  var r=parseInt(hex.substr(1,2),16), g=parseInt(hex.substr(3,2),16), b=parseInt(hex.substr(5,2),16);
+  var a = (typeof alpha==='number' ? clamp(alpha,0.1,1) : 1);
+  return 'rgba('+r+','+g+','+b+','+a+')';
+}
+function applyTheme(t){
+  var root=document.documentElement.style;
+  var cardOpacity = (typeof t.cardOpacity==='number' ? clamp(t.cardOpacity,0.1,1) : 1);
+  root.setProperty('--primary', t.primary||'#3a7afe');
+  root.setProperty('--text', t.text||'#1f2937');
+  root.setProperty('--card', hexToRgbaStr(t.card||'#ffffff', cardOpacity));
+  root.setProperty('--bg', t.bg||'#f8fafc');
+  root.setProperty('--progress', t.progress || t.primary || '#3a7afe');
+  document.body.style.backgroundImage = t.bgImage ? ('url('+t.bgImage+')') : 'none';
+  // 水印
+  var wmbox=$('watermark'), wmImg=$('wm-img'), wmText=$('wm-text');
+  if(t.logoImage){
+    wmImg.src=t.logoImage; wmImg.classList.remove('hide'); wmText.classList.add('hide');
+    wmImg.style.opacity = String(typeof t.logoOpacity==='number'? t.logoOpacity : 0.12);
+    wmImg.style.width = String(t.logoSize || 160) + 'px';
+  }else{
+    wmImg.classList.add('hide'); wmText.classList.remove('hide'); wmText.style.opacity='0.08';
+  }
+  var pos = t.logoPos || 'bottom-center';
+  wmbox.style.justifyContent = (pos.indexOf('left')>=0 ? 'flex-start' : (pos.indexOf('right')>=0 ? 'flex-end' : 'center'));
+  wmbox.style.alignItems = (pos==='center' ? 'center' : 'flex-end');
+  wmbox.style.top = (pos==='center' ? '0' : '');
+  wmbox.style.bottom = (pos==='center' ? '0' : '58px');
+
+  // 回填
+  $('c-primary').value=toColorHex(t.primary||'#3a7afe');
+  $('c-text').value=toColorHex(t.text||'#1f2937');
+  $('c-card').value=toColorHex(t.card||'#ffffff');
+  $('card-opacity').value = (typeof t.cardOpacity==='number' ? t.cardOpacity : 1);
+  $('c-bg').value=toColorHex(t.bg||'#f8fafc');
+  $('c-progress').value=toColorHex(t.progress || t.primary || '#3a7afe');
+  $('bg-url').value=t.bgImageURL || '';
+  $('logo-url').value=t.logoURL || '';
+  $('logo-size').value=t.logoSize || 160;
+  $('logo-opacity').value=(typeof t.logoOpacity==='number' ? t.logoOpacity : 0.12);
+  $('logo-pos').value=pos;
+
+  $('s-primary').style.background=t.primary||'#3a7afe';
+  $('s-text').style.background=t.text||'#1f2937';
+  $('s-card').style.background=hexToRgbaStr(t.card||'#ffffff', cardOpacity);
+  $('s-bg').style.background=t.bg||'#f8fafc';
+  $('s-progress').style.background=t.progress || t.primary || '#3a7afe';
+}
+function saveTheme(){
+  var t={
+    primary:$('c-primary').value,
+    text:$('c-text').value,
+    card:$('c-card').value,
+    cardOpacity:(function(){ var v=Number($('card-opacity').value); if(!(v>0)) v=1; return clamp(v,0.1,1); })(),
+    bg:$('c-bg').value,
+    progress:$('c-progress').value,
+    bgImageURL:($('bg-url').value||'').trim(),
+    bgImage:'',
+    logoURL:($('logo-url').value||'').trim(),
+    logoImage:'',
+    logoSize:Number($('logo-size').value)||160,
+    logoOpacity:(function(){var v=Number($('logo-opacity').value); if(!(v>0)) v=0.12; if(v<0.02) v=0.02; if(v>0.6) v=0.6; return v;})(),
+    logoPos:$('logo-pos').value || 'bottom-center'
+  };
+  t.bgImage = t.bgImageURL ? t.bgImageURL : (currentTheme.bgImage || '');
+  t.logoImage = t.logoURL ? t.logoURL : (currentTheme.logoImage || '');
+  currentTheme=t; saveJSON(THEME_KEY,t); applyTheme(t);
+}
+function resetTheme(){
+  currentTheme={ primary:'#3a7afe', text:'#1f2937', card:'#ffffff', cardOpacity:1, bg:'#f8fafc', progress:'#3a7afe',
+    bgImage:'', bgImageURL:'', logoImage:'', logoURL:'', logoSize:160, logoOpacity:0.12, logoPos:'bottom-center' };
+  saveJSON(THEME_KEY,currentTheme); applyTheme(currentTheme);
+}
+function clearBackground(){ currentTheme.bgImage=''; currentTheme.bgImageURL=''; saveJSON(THEME_KEY,currentTheme); applyTheme(currentTheme); }
+
+$('bg-file').addEventListener('change', function(ev){
+  var f=ev.target.files[0]; if(!f) return;
+  var r=new FileReader();
+  r.onload=function(){ currentTheme.bgImage=r.result; currentTheme.bgImageURL=''; saveJSON(THEME_KEY,currentTheme); applyTheme(currentTheme); };
+  r.readAsDataURL(f);
+});
+$('logo-file').addEventListener('change', function(ev){
+  var f=ev.target.files[0]; if(!f) return;
+  var r=new FileReader();
+  r.onload=function(){ currentTheme.logoImage=r.result; currentTheme.logoURL=''; saveJSON(THEME_KEY,currentTheme); applyTheme(currentTheme); };
+  r.readAsDataURL(f);
+});
+
+/* ===== 预算 ===== */
+var budget=loadJSON(BUDGET_KEY,{daily:null,weekly:null,monthly:null,yearly:null});
+function nOrNull(v){ var n=Number(v); return isFinite(n)&&n>0 ? n : null; }
+function saveBudget(){
+  budget={ daily:nOrNull($('bd').value), weekly:nOrNull($('bw').value), monthly:nOrNull($('bm').value), yearly:nOrNull($('by').value) };
+  saveJSON(BUDGET_KEY,budget);
+  checkDailyBubble(); checkRangeBubble(); updateDailyProgressUI();
+  alert('预算已保存');
+}
+function resetBudget(){
+  budget={ daily:null,weekly:null,monthly:null,yearly:null };
+  saveJSON(BUDGET_KEY,budget);
+  $('bd').value=''; $('bw').value=''; $('bm').value=''; $('by').value='';
+  checkDailyBubble(); checkRangeBubble(); updateDailyProgressUI();
+}
+
+/* ===== 视图：记账页 ===== */
+var elTodayTotal=$('today-total'), elTodayDate=$('today-date'), elSelectedList=$('selected-list');
+var elEntryDate=$('entry-date'), elMemoList=$('memo-list'), elMemoInput=$('memo-input'), elMemoDate=$('memo-date');
+var elProgress=$('budget-progress'), elProgressText=$('daily-progress-text'), elDailyLeft=$('daily-left'), elDailyLimit=$('daily-limit'), elProgressWrap=$('daily-progress-wrap');
+
+function renderTodayHeader(){
+  var t=todayStr(); var list=filterByDateRange(loadEntries(), t, t); var spent=sum(list);
+  elTodayTotal.textContent=fmt(spent);
+  elTodayDate.textContent=new Date().toLocaleDateString('zh-CN',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  updateDailyProgressUI(spent);
+  checkDailyBubble();
+}
+function renderSelectedDay(){
+  var d=elEntryDate.value;
+  var list=filterByDateRange(loadEntries(), d, d).sort(function(a,b){ return b.ts-a.ts; });
+  elSelectedList.innerHTML=list.length?'':'<li class="muted">该日暂无记录</li>';
+  var i;
+  for(i=0;i<list.length;i++){
+    var e=list[i];
+    var li=document.createElement('li'); li.className='item';
+    li.innerHTML='<div>'+new Date(e.ts).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' · '+e.type+'</div>'
+                +'<div><b>'+fmt(e.amount)+'</b> <button class="link" type="button" onclick="del('+e.ts+')">删除</button></div>';
+    elSelectedList.appendChild(li);
+  }
+}
+function clearSelectedDay(){
+  var d=elEntryDate.value; if(!confirm('清除 '+d+' 的所有记录？')) return;
+  var all=loadEntries(), out=[], i;
+  for(i=0;i<all.length;i++){ if(all[i].date!==d) out.push(all[i]); }
+  saveEntries(out); renderTodayHeader(); renderSelectedDay(); if(!isMineHidden()) renderReport(currentRange);
+}
+function del(ts){ removeEntry(ts); renderTodayHeader(); renderSelectedDay(); if(!isMineHidden()) renderReport(currentRange); }
+
+/* ===== 备忘录渲染 ===== */
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[m]; }); }
+function renderMemos(){
+  var d=elMemoDate.value; var list=loadMemos(d).sort(function(a,b){return a.id-b.id;});
+  elMemoList.innerHTML = list.length? '' : '<div class="muted">该日暂无备忘</div>';
+  var i;
+  for(i=0;i<list.length;i++){
+    var item=list[i];
+    var row=document.createElement('div'); row.className='todo'+(item.done?' done':'');
+    row.innerHTML='<div class="circle" onclick="toggleMemo('+item.id+')"></div>'
+                 +'<div class="text" style="flex:1;">'+escapeHtml(item.text)+'</div>'
+                 +'<button class="link" type="button" onclick="removeMemo('+item.id+')">删除</button>';
+    elMemoList.appendChild(row);
+  }
+}
+function addMemo(){
+  var text=(elMemoInput.value||'').trim(); if(!text) return;
+  var d=elMemoDate.value; var list=loadMemos(d); var id=Date.now();
+  list.push({id:id,text:text,done:false}); saveMemos(d,list); elMemoInput.value=''; renderMemos();
+}
+function toggleMemo(id){
+  var d=elMemoDate.value; var list=loadMemos(d); var i,idx=-1;
+  for(i=0;i<list.length;i++){ if(list[i].id===id){ idx=i; break; } }
+  if(idx<0) return; list[idx].done=!list[idx].done; saveMemos(d,list); renderMemos();
+}
+function removeMemo(id){
+  var d=elMemoDate.value; var list=loadMemos(d), out=[], i;
+  for(i=0;i<list.length;i++){ if(list[i].id!==id) out.push(list[i]); }
+  saveMemos(d,out); renderMemos();
+}
+
+/* ===== 图表 / 区间 ===== */
+var elRangeTotal=$('range-total'), elSumB=$('sum-b'), elSumL=$('sum-l'), elSumD=$('sum-d');
+var elRangeList=$('range-list'), elChart=$('chart'), elCaption=$('chart-caption');
+var elRangeTitle=$('range-title'), elDetailTitle=$('detail-title'), elByTypeBox=$('bytype-box');
+var tip=$('chart-tip'), guide=$('chart-guide');
+
+var currentRange='week';
+var chartMode='expense'; // 'expense' | 'weight'
+var lastChartState=null; // 保存绘图参数用于命中测试
+var longPressTimer=null, isPressing=false;
+
+function setReportRange(r){
+  currentRange=r;
+  $('seg-week').classList.remove('active'); $('seg-month').classList.remove('active'); $('seg-year').classList.remove('active');
+  $('seg-'+r).classList.add('active');
+  renderReport(r);
+}
+function setChartMode(m){
+  chartMode=m;
+  $('seg-expense').classList.remove('active'); $('seg-weight').classList.remove('active');
+  $('seg-'+m).classList.add('active');
+  if(m==='expense'){
+    elRangeTitle.textContent='区间总支出';
+    elDetailTitle.textContent='区间明细';
+    elByTypeBox.classList.remove('hide');
+    $('bubble-range').classList.remove('hide');
+  }else{
+    elRangeTitle.textContent='区间平均体重';
+    elDetailTitle.textContent='体重明细';
+    elByTypeBox.classList.add('hide');
+    $('bubble-range').classList.add('hide');
+  }
+  renderReport(currentRange);
+}
+
+function renderReport(type){
+  if(!type) type='week';
+  var all=loadEntries().sort(function(a,b){return b.ts-a.ts;});
+  var range = (type==='week') ? getWeekRange() : (type==='month' ? getMonthRange() : getYearRange());
+
+  if(chartMode==='expense'){
+    var inRange=filterByDateRange(all, range.start, range.end);
+    var grouped = (type==='year') ? groupByMonth(range, inRange) : groupByDate(range, inRange);
+    elRangeTotal.textContent = fmt(sum(inRange));
+    elSumB.textContent = fmt(grouped.byType['早餐']);
+    elSumL.textContent = fmt(grouped.byType['午餐']);
+    elSumD.textContent = fmt(grouped.byType['晚餐']);
+    elRangeList.innerHTML = inRange.length ? '' : '<li class="muted">本区间暂无记录</li>';
+    var i;
+    for(i=0;i<inRange.length;i++){
+      var e=inRange[i], li=document.createElement('li'); li.className='item';
+      li.innerHTML='<div>'+e.date+' · '+e.type+'</div><div><b>'+fmt(e.amount)+'</b></div>';
+      elRangeList.appendChild(li);
+    }
+    var labs=(type==='year'? grouped.labels : sliceLabels(grouped.labels));
+    drawLineChart(elChart, labs, grouped.sums, 'expense');
+    elCaption.textContent = (type==='week' ? ('支出周报（'+range.start+' ～ '+range.end+'）') : (type==='month' ? ('支出月报（'+range.start+' ～ '+range.end+'）') : ('支出年报（'+range.start.slice(0,4)+'年）')));
+    checkRangeBubble(type, sum(inRange));
+  }else{
+    var weightMap=loadWeights(), labels=[], values=[], d;
+    for(d=new Date(range.start); d<=new Date(range.end); d.setDate(d.getDate()+1)){
+      var k=d.toISOString().slice(0,10);
+      labels.push(type==='year'? k.slice(5,7) : k.slice(5));
+      values.push(weightMap.hasOwnProperty(k)? Number(weightMap[k]) : null);
+    }
+    var arr=[], i2;
+    for(i2=0;i2<values.length;i2++){ if(typeof values[i2]==='number' && isFinite(values[i2])) arr.push(values[i2]); }
+    var avg = arr.length ? (arr.reduce(function(a,b){return a+b;},0)/arr.length) : 0;
+    elRangeTotal.textContent = (avg? (avg.toFixed(1)+' kg') : '—');
+    elRangeList.innerHTML='';
+    var k;
+    var keys=[]; for(k in weightMap){ if(weightMap.hasOwnProperty(k) && k>=range.start && k<=range.end) keys.push(k); }
+    keys.sort();
+    for(i2=0;i2<keys.length;i2++){
+      var dd=keys[i2]; var li2=document.createElement('li'); li2.className='item';
+      li2.innerHTML='<div>'+dd+'</div><div><b>'+Number(weightMap[dd]).toFixed(1)+' kg</b></div>'; elRangeList.appendChild(li2);
+    }
+    if(!elRangeList.children.length) elRangeList.innerHTML='<li class="muted">本区间暂无体重记录</li>';
+    drawLineChart(elChart, labels, values, 'weight');
+    elCaption.textContent = (type==='week' ? ('体重周报（'+range.start+' ～ '+range.end+'）') : (type==='month' ? ('体重月报（'+range.start+' ～ '+range.end+'）') : ('体重年报（'+range.start.slice(0,4)+'年）')));
+  }
+}
+function sliceLabels(labs){
+  var out=[], i; for(i=0;i<labs.length;i++){ out.push(labs[i].slice(0,2)==='20'? labs[i].slice(5): labs[i]); } return out;
+}
+
+function drawLineChart(canvas, labels, values, mode){
+  var ctx=canvas.getContext('2d'), dpr=window.devicePixelRatio||1, cssH=260;
+  canvas.style.width='100%'; canvas.style.height=cssH+'px';
+  canvas.width=Math.floor((canvas.clientWidth||canvas.parentElement.clientWidth)*dpr);
+  canvas.height=Math.floor(cssH*dpr);
+  var P={l:46*dpr,r:12*dpr,t:16*dpr,b:24*dpr}, W=canvas.width-P.l-P.r, H=canvas.height-P.t-P.b;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.font=(12*dpr)+'px -apple-system, BlinkMacSystemFont, sans-serif'; ctx.fillStyle='#6b7280';
+
+  var numericVals=[], i;
+  for(i=0;i<values.length;i++){ if(typeof values[i]==='number' && isFinite(values[i])) numericVals.push(values[i]); }
+  var maxV=Math.max(10, Math.ceil(Math.max.apply(null, numericVals.concat([0])))), minV=0;
+  if(mode==='weight'){
+    if(numericVals.length){
+      var minN=Math.min.apply(null, numericVals), maxN=Math.max.apply(null, numericVals);
+      minV = Math.floor(minN*0.98); maxV = Math.ceil(maxN*1.02);
+      if(maxV===minV) maxV=minV+1;
+    }else{ minV=0; maxV=1; }
+  }
+  var stepY = niceStep((maxV-minV)/4);
+  var topAxis = Math.ceil(maxV/stepY)*stepY;
+  var bottomAxis = Math.floor(minV/stepY)*stepY;
+
+  ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=1*dpr;
+  var y; for(y=bottomAxis; y<=topAxis; y+=stepY){
+    var py=P.t+H-((y-bottomAxis)/(topAxis-bottomAxis))*H;
+    ctx.beginPath(); ctx.moveTo(P.l,py); ctx.lineTo(P.l+W,py); ctx.stroke();
+    ctx.fillText((mode==='expense'?'¥':'')+y, 4*dpr, py-2*dpr);
+  }
+  var n=labels.length, stepX=W/Math.max(1,n-1), every=Math.ceil(n/6)||1, j;
+  for(j=0;j<n;j+=every){ var x=P.l+j*stepX; ctx.fillText(labels[j], x-10*dpr, P.t+H+14*dpr); }
+
+  var prim=getComputedStyle(document.documentElement).getPropertyValue('--primary'); prim = (prim && prim.trim()) || '#3b82f6';
+  ctx.strokeStyle=prim; ctx.lineWidth=2*dpr; ctx.beginPath();
+  var started=false;
+  for(i=0;i<values.length;i++){
+    var v=values[i];
+    if(typeof v==='number' && isFinite(v)){
+      var x2=P.l+i*stepX, y2=P.t+H-((v-bottomAxis)/(topAxis-bottomAxis))*H;
+      if(!started){ ctx.moveTo(x2,y2); started=true; } else { ctx.lineTo(x2,y2); }
+    }
+  }
+  if(started) ctx.stroke();
+
+  if(mode==='expense'){
+    var grad=ctx.createLinearGradient(0,P.t,0,P.t+H); grad.addColorStop(0,'rgba(59,130,246,.25)'); grad.addColorStop(1,'rgba(59,130,246,0)');
+    ctx.fillStyle=grad; ctx.beginPath(); started=false;
+    for(i=0;i<values.length;i++){
+      var v2=values[i]; var x3=P.l+i*stepX;
+      var y3=(typeof v2==='number' && isFinite(v2)) ? (P.t+H-((v2-bottomAxis)/(topAxis-bottomAxis))*H) : null;
+      if(y3!=null){ if(!started){ ctx.moveTo(x3,y3); started=true; } else { ctx.lineTo(x3,y3); } }
+    }
+    if(started){ ctx.lineTo(P.l+(n-1)*stepX, P.t+H); ctx.lineTo(P.l, P.t+H); ctx.closePath(); ctx.fill(); }
+  }
+  ctx.fillStyle='#2563eb';
+  for(i=0;i<values.length;i++){
+    var vv=values[i];
+    if(typeof vv==='number' && isFinite(vv)){
+      var xx=P.l+i*stepX, yy=P.t+H-((vv-bottomAxis)/(topAxis-bottomAxis))*H;
+      ctx.beginPath(); ctx.arc(xx,yy,2.5*dpr,0,Math.PI*2); ctx.fill();
+    }
+  }
+
+  // 存储交互状态
+  lastChartState={canvas:canvas, labels:labels, values:values, P:P, stepX:stepX, bottomAxis:bottomAxis, topAxis:topAxis, H:H, dpr:dpr, mode:mode};
+  attachChartHandlers();
+}
+function niceStep(x){
+  var xx = (x||1), pow=Math.pow(10, Math.floor(Math.log(xx)/Math.LN10)), norm=xx/pow;
+  return (norm>5?10:(norm>2?5:(norm>1?2:1)))*pow;
+}
+function checkRangeBubble(type, total){
+  if(!type) type=currentRange;
+  var bubble=$('bubble-range');
+  if(chartMode==='weight'){ bubble.classList.add('hide'); return; }
+  var spent = (typeof total==='number') ? total : Number(($('range-total').textContent||'').replace(/[¥,]/g,'')) || 0;
+  var limit = (type==='week')?budget.weekly: (type==='month'?budget.monthly: budget.yearly);
+  if(limit && spent>limit){ bubble.textContent='超支 '+fmt(spent-limit); bubble.classList.add('show'); }
+  else bubble.classList.remove('show');
+}
+
+/* ===== 今日预算进度条 & 今日超支气泡 ===== */
+function updateDailyProgressUI(spentParam){
+  var t=todayStr();
+  var spent = (typeof spentParam==='number') ? spentParam : sum(filterByDateRange(loadEntries(), t, t));
+  var limit = budget.daily;
+  if(!limit){
+    elProgress.value=0; elProgressText.textContent='0%'; elDailyLeft.textContent='剩余 ¥0.00'; elDailyLimit.textContent='日预算未设置'; elProgressWrap.style.opacity='0.6'; return;
+  }
+  elProgressWrap.style.opacity='1';
+  var ratio=spent/limit, pct=Math.max(0, Math.min(100, Math.round(ratio*100)));
+  elProgress.value=pct; elProgressText.textContent=pct+'%';
+  var left=Math.max(0, limit-spent);
+  elDailyLeft.textContent = (spent>limit) ? ('已超出 '+fmt(spent-limit)) : ('剩余 '+fmt(left));
+  elDailyLimit.textContent = '日预算 '+fmt(limit);
+}
+function checkDailyBubble(){
+  var t=todayStr();
+  var spent=sum(filterByDateRange(loadEntries(), t, t));
+  var limit=budget.daily;
+  var b=$('bubble-daily');
+  if(limit && spent>limit){
+    b.textContent='今日超支 '+fmt(spent-limit);
+    b.classList.add('show');
+  }else{
+    b.classList.remove('show');
+  }
+}
+
+/* ===== 「区间明细」展开/收起 ===== */
+function toggleRangeDetail(){
+  var list=$('range-list'), btn=$('toggle-detail');
+  var hide=list.classList.toggle('hide');
+  btn.textContent = hide ? '展开明细' : '收起明细';
+}
+
+/* ===== 图表长按查看 ===== */
+function attachChartHandlers(){
+  var c=elChart;
+  // 防止重复绑定
+  if(c._handlersAttached){ return; }
+  c._handlersAttached=true;
+
+  function getPointFromEvent(ev){
+    var rect=c.getBoundingClientRect();
+    var clientX = (ev.touches && ev.touches[0] ? ev.touches[0].clientX : ev.clientX);
+    var clientY = (ev.touches && ev.touches[0] ? ev.touches[0].clientY : ev.clientY);
+    return { x:clientX-rect.left, y:clientY-rect.top };
+  }
+  function showAt(xCss){
+    if(!lastChartState) return;
+    var st=lastChartState, P=st.P, stepX=st.stepX, labels=st.labels, vals=st.values, H=st.H;
+    var n=labels.length, xRel = xCss*(st.dpr), // CSS -> 画布坐标
+        idx = clamp(Math.round((xRel - P.l)/stepX), 0, n-1),
+        xCanvas = P.l + idx*stepX,
+        xGuideCss = xCanvas/st.dpr;
+
+    var v=vals[idx], label=labels[idx];
+    // 显示提示
+    guide.style.left = Math.round(xGuideCss)+'px';
+    guide.classList.remove('hide');
+
+    var text = (st.mode==='expense' ? (label+' · '+(typeof v==='number'? fmt(v):'—')) : (label+' · '+(typeof v==='number'? (v.toFixed(1)+' kg'):'—')));
+    tip.textContent=text;
+    tip.style.left = Math.round(xGuideCss)+'px';
+    tip.style.top = '8px';
+    tip.classList.remove('hide');
+  }
+  function startPress(ev){
+    clearTimeout(longPressTimer);
+    isPressing=false;
+    longPressTimer=setTimeout(function(){ isPressing=true; var p=getPointFromEvent(ev); showAt(p.x); }, 450);
+  }
+  function movePress(ev){
+    if(isPressing){ var p=getPointFromEvent(ev); showAt(p.x); ev.preventDefault(); }
+  }
+  function endPress(){
+    clearTimeout(longPressTimer);
+    if(isPressing){ isPressing=false; tip.classList.add('hide'); guide.classList.add('hide'); }
+  }
+
+  c.addEventListener('mousedown', startPress);
+  c.addEventListener('mousemove', movePress);
+  window.addEventListener('mouseup', endPress);
+
+  c.addEventListener('touchstart', function(e){ startPress(e); }, {passive:true});
+  c.addEventListener('touchmove', function(e){ movePress(e); }, {passive:false});
+  c.addEventListener('touchend', endPress);
+}
+
+/* ===== 弹窗 & 导入导出 ===== */
+var pendingType=null;
+var modal=$('modal'), amountInput=$('amount'), modalTitle=$('modal-title');
+function openAdd(type){ pendingType=type; modalTitle.textContent='添加'+type; amountInput.value=''; modal.style.display='flex'; setTimeout(function(){ try{amountInput.focus();}catch(e){} },50); }
+function closeModal(){ modal.style.display='none'; pendingType=null; }
+function quick(v){ var n=Number(amountInput.value||0)+v; amountInput.value=(Math.round(n*100)/100).toFixed(2).replace(/\.00$/,''); }
+function saveAmount(){
+  var v=Number(amountInput.value), dateStr=$('entry-date').value;
+  if(!(v>0)){ alert('请输入大于0的金额'); return; }
+  if(!dateStr){ alert('请选择记账日期'); return; }
+  addEntryWithDate(pendingType, v, dateStr); closeModal();
+  renderTodayHeader(); renderSelectedDay(); if(!isMineHidden()) renderReport(currentRange);
+}
+function exportData(){
+  var data=JSON.stringify(loadEntries(), null, 2);
+  var blob=new Blob([data],{type:'application/json'}); var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); var stamp=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'); a.href=url; a.download='ledger-'+stamp+'.json'; a.click(); URL.revokeObjectURL(url);
+}
+function importData(e){
+  var file=e.target.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(){
+    try{
+      var arr=JSON.parse(reader.result); if(Object.prototype.toString.call(arr)!=='[object Array]') throw new Error('格式不正确');
+      var cur=loadEntries(), incoming=[], i;
+      for(i=0;i<arr.length;i++){ var x=arr[i]; if(x && typeof x.amount==='number' && x.type && x.date) incoming.push(x); }
+      saveEntries(cur.concat(incoming)); alert('导入成功：'+incoming.length+' 条');
+      renderTodayHeader(); renderSelectedDay(); renderReport(currentRange);
+    }catch(err){ alert('导入失败：'+(err.message||err)); }
+  };
+  reader.readAsText(file,'utf-8');
+}
+function clearAll(){
+  if(!confirm('将清空所有记账、预算、体重、主题与备忘录，确定？')) return;
+  try{
+    localStorage.removeItem(KEY); localStorage.removeItem(BUDGET_KEY); localStorage.removeItem(THEME_KEY); localStorage.removeItem(MEMO_KEY); localStorage.removeItem(WEIGHT_KEY);
+  }catch(e){}
+  budget={ daily:null,weekly:null,monthly:null,yearly:null }; currentTheme={};
+  init();
+}
+
+/* ===== 导航 & 初始化 ===== */
+function switchTab(tab){
+  var ledger=$('page-ledger'), mine=$('page-mine'), t1=$('tab-ledger'), t2=$('tab-mine');
+  if(tab==='ledger'){
+    ledger.classList.remove('hide'); mine.classList.add('hide'); t1.classList.add('active'); t2.classList.remove('active'); $('title').textContent='记账';
+  }else{
+    ledger.classList.add('hide'); mine.classList.remove('hide'); t1.classList.remove('active'); t2.classList.add('active'); $('title').textContent='我的'; renderReport(currentRange);
+  }
+  window.scrollTo(0,0);
+}
+function isMineHidden(){ return $('page-mine').classList.contains('hide'); }
+
+function init(){
+  applyTheme(currentTheme||{});
+  $('entry-date').value = todayStr();
+  $('memo-date').value = todayStr();
+  $('weight-date').value = todayStr();
+  $('bd').value = budget.daily || '';
+  $('bw').value = budget.weekly || '';
+  $('bm').value = budget.monthly || '';
+  $('by').value = budget.yearly || '';
+  renderTodayHeader(); renderSelectedDay(); renderMemos(); setReportRange('week'); setChartMode('expense');
+  $('entry-date').addEventListener('change', renderSelectedDay);
+  $('memo-date').addEventListener('change', renderMemos);
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
